@@ -1,0 +1,56 @@
+---
+cloudiq_base_url: "https://cloudiq.apis.dell.com/cloudiq"
+cloudiq_token_url: "https://cloudiq.apis.dell.com/auth/oauth/v2/token"
+
+# These tokens can be generated at https://cloudiq.emc.com/ui/index.html#/api
+# A CloudIQ API Key expires after 12 months and you must regenerate it.
+cloudiq_client_id: ""
+cloudiq_client_secret: ""
+
+# Port the http exporter will be listening on
+exporter_listening_port: 9090
+
+# Set what you wish to collect to true, each metric you enable will increase the scrape duration
+metrics:
+
+# Hardware:
+  ports:
+    collect: false
+    url: "/rest/v1/ports"
+
+# Storage:
+  datastores:
+    collect: false
+    url: "/rest/v1/datastores"
+  drives:
+    collect: false
+    url: "/rest/v1/drives"
+  filesystems:
+    collect: false
+    url: "/rest/v1/filesystems"
+  hosts:
+    collect: false
+    url: "/rest/v1/hosts"
+  pools:
+    collect: false
+    url: "/rest/v1/pools"
+  storage_groups:
+    collect: false
+    url: "/rest/v1/storage_groups"
+  storage_resource_pools:
+    collect: false
+    url: "/rest/v1/storage_resource_pools"
+  volumes:
+    collect: false
+    url: "/rest/v1/volumes"
+
+# Systems:
+  network_systems:
+    collect: false
+    url: "/rest/v1/network_systems"
+  server_systems:
+    collect: false
+    url: "/rest/v1/server_systems"
+  storage_systems:
+    collect: false
+    url: "/rest/v1/storage_systems"
