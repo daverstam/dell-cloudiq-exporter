@@ -49,8 +49,9 @@ metrics:
     collect: false
     url: "/rest/v1/network_systems"
   server_systems:
-    collect: false
+    collect: true
     url: "/rest/v1/server_systems"
   storage_systems:
-    collect: false
+    collect: true
+    collect_live_metrics: true
     url: "/rest/v1/storage_systems"

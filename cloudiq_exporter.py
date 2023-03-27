@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
+import string
 import requests
 import yaml
 import time
 import json
 import datetime
+from operator import itemgetter
 from prometheus_client import start_http_server
 from prometheus_client.core import GaugeMetricFamily, REGISTRY
 
@@ -16,34 +18,67 @@ class CloudiqConnection(object):
         self.cloudiq_client_secret = cfg['cloudiq_client_secret']
 
     def request_api_token(self):
-        self.data = {'grant_type': 'client_credentials',
+        data = {'grant_type': 'client_credentials',
                  'client_id': self.cloudiq_client_id,
                  'client_secret': self.cloudiq_client_secret}
 
-        self.cloudiq_token_request = requests.post(self.cloudiq_token_url, self.data).json()
-        self.cloudiq_token = self.cloudiq_token_request['access_token']
-        self.cloudiq_token_expiration = self.cloudiq_token_request['expires_in']
-       
-        return self.cloudiq_token
+        cloudiq_token_request = requests.post(self.cloudiq_token_url, data).json()
+        cloudiq_token = cloudiq_token_request
+
+        return cloudiq_token
 
 class CloudiqMetrics(object):
     def __init__(self):
         self.cloudiq_base_url = cfg['cloudiq_base_url']
         self.cloudiq_token = ''
 
-    def request_metrics(self, metric_url):
+    def request_metrics(self, metric_url: string):
         if not self.cloudiq_token:
-            self.cloudiq_token = CloudiqConnection().request_api_token()
+            self.cloudiq_token_data = CloudiqConnection().request_api_token()
+            self.cloudiq_token = self.cloudiq_token_data['access_token']
+            self.cloudiq_token_expiration = self.cloudiq_token_data['expires_in']
             self.cloudiq_token_creation_time = datetime.datetime.now()
         elif self.cloudiq_token:
-            if datetime.datetime.now() > (self.cloudiq_token_creation_time + datetime.timedelta(minutes=50)):
-                self.cloudiq_token = CloudiqConnection().request_api_token()
+            if datetime.datetime.now() > (self.cloudiq_token_creation_time + datetime.timedelta(seconds=self.cloudiq_token_expiration) - datetime.timedelta(minutes=10)):
+                self.cloudiq_token_data = CloudiqConnection().request_api_token()
+                self.cloudiq_token = self.cloudiq_token_data['access_token']
+                self.cloudiq_token_expiration = self.cloudiq_token_data['expires_in']
                 self.cloudiq_token_creation_time = datetime.datetime.now()
 
-        self.headers = {'Authorization': f'Bearer {self.cloudiq_token}'}
-        self.cloudiq_metric_request = requests.get(self.cloudiq_base_url + metric_url, headers=self.headers)
+        headers = {'Authorization': f'Bearer {self.cloudiq_token}'}
+        cloudiq_metric_request = requests.get(self.cloudiq_base_url + metric_url, headers=headers)
 
-        return self.cloudiq_metric_request
+        return cloudiq_metric_request
+
+    def request_live_metrics(self, resource_type: string, system_id: list, metric_name: string):
+        if not self.cloudiq_token:
+            self.cloudiq_token_data = CloudiqConnection().request_api_token()
+            self.cloudiq_token = self.cloudiq_token_data['access_token']
+            self.cloudiq_token_expiration = self.cloudiq_token_data['expires_in']
+            self.cloudiq_token_creation_time = datetime.datetime.now()
+        elif self.cloudiq_token:
+            if datetime.datetime.now() > (self.cloudiq_token_creation_time + datetime.timedelta(seconds=self.cloudiq_token_expiration) - datetime.timedelta(minutes=10)):
+                self.cloudiq_token_data = CloudiqConnection().request_api_token()
+                self.cloudiq_token = self.cloudiq_token_data['access_token']
+                self.cloudiq_token_expiration = self.cloudiq_token_data['expires_in']
+                self.cloudiq_token_creation_time = datetime.datetime.now()
+
+        metrics_url = '/rest/v1/metrics/query'
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.cloudiq_token}'
+        }
+        body = {
+            "resource_type": resource_type,
+            "ids": system_id,
+            "metrics": [
+                f"{metric_name}"
+            ],
+            "interval": "PT5M",
+        }
+        cloudiq_live_metric_request = requests.post(self.cloudiq_base_url + metrics_url, headers=headers, data=json.dumps(body))
+
+        return cloudiq_live_metric_request
 
     def collect(self):
         for k, v in cfg['metrics'].items():
@@ -170,7 +205,10 @@ class CloudiqMetrics(object):
                                 id = i['id']
                                 object_name = i['object_name']
                                 serial_number = i['serial_number']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name,
@@ -210,7 +248,10 @@ class CloudiqMetrics(object):
                             try:
                                 id = i['id']
                                 object_name = i['object_name']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name
@@ -250,7 +291,10 @@ class CloudiqMetrics(object):
                                 operating_system = i['operating_system']
                                 system_model = i['system_model']
                                 system_name = i['system_name']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name,
@@ -295,7 +339,10 @@ class CloudiqMetrics(object):
                                 object_name = i['object_name']
                                 system_model = i['system_model']
                                 system_name = i['system_name']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name,
@@ -346,7 +393,10 @@ class CloudiqMetrics(object):
                             try:
                                 id = i['id']
                                 object_name = i['object_name']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name
@@ -466,7 +516,10 @@ class CloudiqMetrics(object):
                             try:
                                 id = i['id']
                                 object_name = i['object_name']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name
@@ -513,7 +566,10 @@ class CloudiqMetrics(object):
                                 id = i['id']
                                 object_name = i['object_name']
                                 pool_id = i['pool_id']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name,
@@ -594,7 +650,10 @@ class CloudiqMetrics(object):
                                 site_name = i['site_name']
                                 type_label = i['type']
                                 version = i['version']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name,
@@ -664,7 +723,10 @@ class CloudiqMetrics(object):
                                 site_name = i['site_name']
                                 type_label = i['type']
                                 version = i['version']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name,
@@ -743,7 +805,10 @@ class CloudiqMetrics(object):
                                 site_name = i['site_name']
                                 type_label = i['type']
                                 version = i['version']
-                                val = i[f'{metric_name}']
+                                if i[f'{metric_name}']:
+                                    val = i[f'{metric_name}']
+                                else:
+                                    val = '0'
                                 metrics.add_metric([
                                     id,
                                     object_name,
@@ -759,6 +824,68 @@ class CloudiqMetrics(object):
                                 pass
 
                         yield metrics
+
+                    if v['collect_live_metrics'] is True:
+                        live_metrics_to_export = {
+                            'bandwidth': 'Amount of data transferred in bytes per second.',
+                            'iops': 'Number of operations per second.',
+                            'latency': 'Latency of the resource, in microseconds (also known as response time).'
+                        }
+                        live_metric_nodes = []
+
+                        for i in metrics_data['results']:
+                            live_metric_nodes.append(i['id'])
+
+                        for metric_name, metric_help in live_metrics_to_export.items():
+                            live_metric_data = json.loads(self.request_live_metrics('storage_system', live_metric_nodes, metric_name).content)
+                            sorted_live_metric_data = sorted(live_metric_data['results'], key=itemgetter('id'))
+                            sorted_metrics_data = sorted(metrics_data['results'], key=itemgetter('id'))
+                            metrics = GaugeMetricFamily(
+                                f'cloudiq_{k}_live_metric_{metric_name}',
+                                f'{metric_help}',
+                                labels = [
+                                    'id',
+                                    'object_name',
+                                    'city',
+                                    'country',
+                                    'location',
+                                    'model',
+                                    'site_name',
+                                    'type',
+                                    'version'
+                                ]
+                            )
+                            for (i, d) in zip(sorted_live_metric_data, sorted_metrics_data):
+                                try:
+                                    if i['id'] == d['id']:
+                                        id = i['id']
+                                        object_name = d['object_name']
+                                        city = d['city']
+                                        country = d['country']
+                                        location = d['location']
+                                        model = d['model']
+                                        site_name = d['site_name']
+                                        type_label = d['type']
+                                        version = d['version']
+                                    try:
+                                        val = i['timestamps'][0]['values'][0]
+                                    except IndexError:
+                                        val = '0'
+                                    metrics.add_metric([
+                                        id,
+                                        object_name,
+                                        city,
+                                        country,
+                                        location,
+                                        model,
+                                        site_name,
+                                        type_label,
+                                        version
+                                        ], val)
+                                except KeyError:
+                                    pass
+
+                            yield metrics
 
 if __name__ == '__main__':
     with open('./config.yml', 'r') as config:
